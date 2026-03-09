@@ -5,14 +5,29 @@ let nearbyUserMarkers = [];
 
 // Initialize map
 function initMap() {
-    // Create map centered on India
-    map = L.map('map').setView([20.5937, 78.9629], 5);
+    if (map) return;
+    
+    map = L.map('map', {
+        center: [20.5937, 78.9629],
+        zoom: 5,
+        zoomControl: false,
+        attributionControl: false,
+        maxZoom: 22 // Allow ultra zoom
+    });
 
-    // Add Esri World Imagery tile layer
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-        maxZoom: 18
-    }).addTo(map);
+    // Google Satellite (Ultra High Res) - Only layer, no API needed
+    const googleSat = L.tileLayer('http://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+        maxZoom: 22, // Allow zooming in very deep
+        maxNativeZoom: 20, // Tiles exist up to 20, zoom 21-22 will stretch
+        subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+        attribution: 'Google'
+    });
+
+    // Add Google Satellite as default and only layer
+    googleSat.addTo(map);
+
+    // Controls
+    L.control.zoom({ position: 'topright' }).addTo(map);
 
     console.log('Map initialized');
 }
@@ -77,23 +92,44 @@ function addAlertMarkers(alerts) {
 
             // Create popup content
             const popupContent = `
-                <div style="min-width: 200px;">
-                    <strong style="color: #fbbf24; font-size: 14px;">Emergency Alert</strong><br>
-                    <strong>Name:</strong> ${alert.user_name || 'Unknown'}<br>
-                    <strong>Phone:</strong> ${alert.user_phone || 'N/A'}<br>
-                    <strong>Type:</strong> ${alert.alert_type || 'N/A'}<br>
-                    <strong>Time:</strong> ${formatTimeAgo(alert.created_at)}<br>
+                <div style="min-width: 220px; padding: 8px;">
+                    <div style="background: #1a1a1a; padding: 10px; border-radius: 6px; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 50px;">NAME:</span>
+                            <span style="color: #fff; font-size: 12px; font-weight: 500;">${alert.user_name || 'Unknown'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 50px;">PHONE:</span>
+                            <span style="color: #fff; font-size: 12px;">${alert.user_phone || 'N/A'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 50px;">TYPE:</span>
+                            <span style="color: #fbbf24; font-size: 12px; font-weight: 500;">${alert.alert_type || 'Voice Help'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="color: #888; font-size: 11px; width: 50px;">TIME:</span>
+                            <span style="color: #aaa; font-size: 11px;">${formatTimeAgo(alert.created_at)}</span>
+                        </div>
+                    </div>
+                    
                     <button onclick="showAlertDetails('${alert.id}')" style="
-                        margin-top: 8px;
                         width: 100%;
-                        background: #fbbf24;
+                        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
                         color: #000;
                         border: none;
-                        padding: 6px;
-                        border-radius: 4px;
+                        padding: 10px;
+                        border-radius: 6px;
                         cursor: pointer;
                         font-weight: 600;
-                    ">View Details</button>
+                        font-size: 12px;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                        transition: all 0.2s;
+                        box-shadow: 0 2px 8px rgba(251, 191, 36, 0.3);
+                    " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 4px 12px rgba(251, 191, 36, 0.4)'" 
+                       onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(251, 191, 36, 0.3)'">
+                        View Details
+                    </button>
                 </div>
             `;
 
@@ -132,12 +168,36 @@ function addNearbyUserMarkers(users, alertLat, alertLon) {
 
             // Create popup content
             const popupContent = `
-                <div style="min-width: 180px;">
-                    <strong style="color: #3b82f6; font-size: 14px;">Nearby Helper</strong><br>
-                    <strong>Name:</strong> ${user.name || 'Unknown'}<br>
-                    <strong>Phone:</strong> ${user.phone || 'N/A'}<br>
-                    <strong>Distance:</strong> ${user.distance.toFixed(2)} km<br>
-                    <strong>Last Update:</strong> ${formatTimeAgo(user.last_location_updated_at)}
+                <div style="min-width: 200px; padding: 8px;">
+                    <div style="
+                        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+                        color: #fff;
+                        padding: 6px 12px;
+                        border-radius: 6px;
+                        font-weight: 600;
+                        font-size: 12px;
+                        margin-bottom: 8px;
+                        text-align: center;
+                    ">👤 NEARBY HELPER</div>
+                    
+                    <div style="background: #1a1a1a; padding: 10px; border-radius: 6px;">
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 60px;">NAME:</span>
+                            <span style="color: #fff; font-size: 12px; font-weight: 500;">${user.name || 'Unknown'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 60px;">PHONE:</span>
+                            <span style="color: #fff; font-size: 12px;">${user.phone || 'N/A'}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                            <span style="color: #888; font-size: 11px; width: 60px;">DISTANCE:</span>
+                            <span style="color: #3b82f6; font-size: 12px; font-weight: 500;">${user.distance.toFixed(2)} km</span>
+                        </div>
+                        <div style="display: flex; align-items: center;">
+                            <span style="color: #888; font-size: 11px; width: 60px;">LAST:</span>
+                            <span style="color: #aaa; font-size: 11px;">${formatTimeAgo(user.last_location_updated_at)}</span>
+                        </div>
+                    </div>
                 </div>
             `;
 

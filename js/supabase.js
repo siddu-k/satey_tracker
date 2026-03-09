@@ -10,27 +10,22 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
     }
 });
 
-// Fetch all alerts from database (Fresh alerts from last 1 hour, deduplicated by user)
+// Fetch all alerts from database (All alerts, deduplicated by user)
 async function fetchAlerts(statusFilter = 'all') {
     try {
-        console.log('Fetching fresh alerts...');
-
-        // Calculate timestamp for 1 hour ago
-        const oneHourAgo = new Date();
-        oneHourAgo.setHours(oneHourAgo.getHours() - 1);
+        console.log('Fetching all alerts...');
 
         let query = supabaseClient
             .from('alert_history')
             .select('*')
-            .gte('created_at', oneHourAgo.toISOString())
             .order('created_at', { ascending: false });
 
         // Apply status filter if not 'all'
         if (statusFilter !== 'all') {
-            if (statusFilter === 'receiving' || statusFilter === 'received') {
-                query = query.in('status', ['acknowledged', 'resolved']);
-            } else {
-                query = query.eq('status', statusFilter);
+            if (statusFilter === 'resolved') {
+                query = query.eq('status', 'resolved');
+            } else if (statusFilter === 'unresolved') {
+                query = query.in('status', ['sent', 'active', 'acknowledged']);
             }
         }
 

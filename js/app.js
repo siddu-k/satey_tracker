@@ -18,9 +18,6 @@ async function initApp() {
 
     // Subscribe to real-time updates
     realtimeSubscription = subscribeToAlerts(handleRealtimeUpdate);
-
-    // Set up auto-cleanup older than 1 hour every minute
-    setInterval(performCleanup, 60000);
 }
 
 // Setup Event Listeners
@@ -44,6 +41,9 @@ function setupEventListeners() {
     // Close Popup
     document.getElementById('closePopup').addEventListener('click', hideAlertDetails);
 
+    // Resolve Button
+    document.getElementById('resolveBtn').addEventListener('click', handleResolveAlert);
+
     // Hide Nearby Section
     document.getElementById('hideNearby').addEventListener('click', () => {
         document.getElementById('nearbySection').style.display = 'none';
@@ -57,16 +57,10 @@ function handleRealtimeUpdate(payload) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT') {
-        // Only add if fresh
-        const oneHourAgo = new Date();
-        oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-
-        if (new Date(newRecord.created_at) >= oneHourAgo) {
-            // Remove any existing alert from the same user to deduplicate
-            currentAlerts = currentAlerts.filter(alert => alert.user_id !== newRecord.user_id);
-            currentAlerts.unshift(newRecord);
-            updateUI();
-        }
+        // Add new alert
+        currentAlerts = currentAlerts.filter(alert => alert.user_id !== newRecord.user_id);
+        currentAlerts.unshift(newRecord);
+        updateUI();
     } else if (eventType === 'UPDATE') {
         currentAlerts = currentAlerts.map(alert =>
             alert.id === newRecord.id ? newRecord : alert
@@ -84,21 +78,6 @@ function handleRealtimeUpdate(payload) {
         if (activeAlertId === oldRecord.id) {
             hideAlertDetails();
         }
-    }
-}
-
-// Perform cleanup of alerts older than 1 hour
-function performCleanup() {
-    console.log('Performing cleanup of old alerts...');
-    const oneHourAgo = new Date();
-    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-
-    const beforeCount = currentAlerts.length;
-    currentAlerts = currentAlerts.filter(alert => new Date(alert.created_at) >= oneHourAgo);
-
-    if (currentAlerts.length !== beforeCount) {
-        console.log(`Cleaned up ${beforeCount - currentAlerts.length} stale alerts`);
-        updateUI();
     }
 }
 
@@ -120,8 +99,13 @@ function updateUI() {
 function updateStats(alerts) {
     document.getElementById('totalAlerts').textContent = alerts.length;
 
-    const activeCount = alerts.filter(a => a.status === 'sent' || a.status === 'active').length;
+    const activeCount = alerts.filter(a => a.status === 'sent' || a.status === 'active' || a.status === 'acknowledged').length;
     document.getElementById('activeAlerts').textContent = activeCount;
+
+    const resolvedCount = alerts.filter(a => a.status === 'resolved').length;
+    document.getElementById('resolvedAlerts').textContent = resolvedCount;
+
+    console.log(`Stats: Total=${alerts.length}, Active=${activeCount}, Resolved=${resolvedCount}`);
 }
 
 // Render Alerts List in Sidebar
@@ -130,7 +114,7 @@ function renderAlertsList(alerts) {
     listContainer.innerHTML = '';
 
     if (alerts.length === 0) {
-        listContainer.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No alerts in last 1 hour</div>';
+        listContainer.innerHTML = '<div style="text-align: center; color: #888; padding: 20px;">No alerts found</div>';
         return;
     }
 
@@ -195,6 +179,20 @@ function updateDetailsPopup(alert) {
     // Ensure photos container is visible if there are photos
     document.getElementById('popupPhotos').style.display = (alert.front_photo_url || alert.back_photo_url) ? 'block' : 'none';
 
+    // Update resolve button state
+    const resolveBtn = document.getElementById('resolveBtn');
+    if (alert.status === 'resolved') {
+        resolveBtn.disabled = false;
+        resolveBtn.textContent = 'MARK AS UNRESOLVED';
+        resolveBtn.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+        resolveBtn.style.color = '#fff';
+    } else {
+        resolveBtn.disabled = false;
+        resolveBtn.textContent = 'MARK AS RESOLVED';
+        resolveBtn.style.background = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)';
+        resolveBtn.style.color = '#000';
+    }
+
     // Show the popup
     document.getElementById('alertPopup').style.display = 'block';
 }
@@ -258,6 +256,50 @@ async function handleFindHelp(event, alertId) {
             `;
             nearbyList.appendChild(item);
         });
+    }
+}
+
+// Handle Resolve Alert Button Click
+async function handleResolveAlert() {
+    if (!activeAlertId) return;
+
+    const resolveBtn = document.getElementById('resolveBtn');
+    const alert = currentAlerts.find(a => a.id === activeAlertId);
+    
+    if (!alert) return;
+
+    resolveBtn.disabled = true;
+    resolveBtn.textContent = alert.status === 'resolved' ? 'UPDATING...' : 'RESOLVING...';
+
+    try {
+        // Toggle status: if resolved -> unresolved, if unresolved -> resolved
+        const newStatus = alert.status === 'resolved' ? 'sent' : 'resolved';
+        
+        // Update alert status in database
+        const { error } = await supabaseClient
+            .from('alert_history')
+            .update({ status: newStatus })
+            .eq('id', activeAlertId);
+
+        if (error) throw error;
+
+        // Update local data
+        const alertIndex = currentAlerts.findIndex(a => a.id === activeAlertId);
+        if (alertIndex !== -1) {
+            currentAlerts[alertIndex].status = newStatus;
+        }
+
+        // Update UI
+        updateUI();
+        updateDetailsPopup(currentAlerts.find(a => a.id === activeAlertId));
+
+        console.log(`Alert status changed to: ${newStatus}`);
+    } catch (error) {
+        console.error('Error updating alert status:', error);
+        alert('Failed to update alert status. Please try again.');
+    } finally {
+        resolveBtn.disabled = false;
+        // Button text will be updated by updateDetailsPopup
     }
 }
 
