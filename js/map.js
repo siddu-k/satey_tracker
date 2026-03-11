@@ -48,7 +48,9 @@ function createAlertIcon() {
                 justify-content: center;
                 box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
                 font-size: 20px;
-            ">⚠️</div>
+                font-weight: bold;
+                color: #fff;
+            ">!</div>
         `,
         iconSize: [40, 40],
         iconAnchor: [20, 20]
@@ -71,7 +73,9 @@ function createUserIcon() {
                 justify-content: center;
                 box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5);
                 font-size: 16px;
-            ">👤</div>
+                font-weight: bold;
+                color: #fff;
+            ">U</div>
         `,
         iconSize: [32, 32],
         iconAnchor: [16, 16]
@@ -178,7 +182,7 @@ function addNearbyUserMarkers(users, alertLat, alertLon) {
                         font-size: 12px;
                         margin-bottom: 8px;
                         text-align: center;
-                    ">👤 NEARBY HELPER</div>
+                    ">[USER] NEARBY HELPER</div>
                     
                     <div style="background: #1a1a1a; padding: 10px; border-radius: 6px;">
                         <div style="display: flex; align-items: center; margin-bottom: 6px;">

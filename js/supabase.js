@@ -142,3 +142,63 @@ function formatDateTime(timestamp) {
         hour12: true
     });
 }
+
+// ========== HELPLINE MANAGEMENT ==========
+
+// Fetch all helplines from database
+async function fetchHelplines() {
+    try {
+        console.log('Fetching helplines...');
+        
+        const { data, error } = await supabaseClient
+            .from('helplines')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error fetching helplines:', error);
+        return [];
+    }
+}
+
+// Add new helpline to database
+async function addHelpline(name, number, category) {
+    try {
+        console.log('Adding helpline...');
+        
+        const { data, error } = await supabaseClient
+            .from('helplines')
+            .insert({
+                name: name,
+                number: number,
+                category: category
+            })
+            .select();
+
+        if (error) throw error;
+        return data;
+    } catch (error) {
+        console.error('Error adding helpline:', error);
+        throw error;
+    }
+}
+
+// Delete helpline from database
+async function deleteHelpline(helplineId) {
+    try {
+        console.log('Deleting helpline...');
+        
+        const { error } = await supabaseClient
+            .from('helplines')
+            .delete()
+            .eq('id', helplineId);
+
+        if (error) throw error;
+        return true;
+    } catch (error) {
+        console.error('Error deleting helpline:', error);
+        throw error;
+    }
+}

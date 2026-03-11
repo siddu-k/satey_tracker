@@ -33,11 +33,6 @@ function setupEventListeners() {
         refreshDashboard('all');
     });
 
-    // Update Button
-    document.getElementById('updateBtn').addEventListener('click', () => {
-        refreshDashboard(document.getElementById('statusFilter').value);
-    });
-
     // Close Popup
     document.getElementById('closePopup').addEventListener('click', hideAlertDetails);
 
