@@ -1004,12 +1004,4 @@ body.dashboard-body {
         flex-direction: column;
         align-items: stretch;
     }
-
-    .nav-back {
-        position: relative;
-        top: -10px;
-        left: 0;
-        margin-bottom: 15px;
-        text-align: center;
-    }
 }
