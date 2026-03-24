@@ -1,0 +1,133 @@
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+#include <TinyGPS++.h>
+#include <HardwareSerial.h>
+
+// Matches Android App Exactly
+#define DEVICE_NAME "ESP32_Safety_Watch"
+#define SERVICE_UUID        "00001234-0000-1000-8000-00805f9b34fb"
+#define CHARACTERISTIC_UUID "00005678-0000-1000-8000-00805f9b34fb"
+
+// Pin Definitions
+#define BUTTON_PIN 13 
+#define LED_PIN 5     
+#define GPS_RX 19
+#define GPS_TX 18
+
+// Objects
+BLECharacteristic *pCharacteristic;
+bool deviceConnected = false;
+TinyGPSPlus gps;
+HardwareSerial SerialGPS(2);
+
+// Logic Variables
+bool lastReportedState = false; 
+unsigned long lastSosSentTime = 0;
+unsigned long lastGpsSent = 0;
+unsigned long lastBlinkTime = 0;
+bool ledState = false;
+
+// --- BLE CALLBACKS ---
+class MyServerCallbacks: public BLEServerCallbacks {
+  void onConnect(BLEServer* pServer) { 
+    deviceConnected = true; 
+    Serial.println("✅ Radio Connected");
+  }
+
+  void onDisconnect(BLEServer* pServer) { 
+    deviceConnected = false; 
+    Serial.println("❌ Radio Disconnected. Rebooting...");
+    delay(1000); 
+    ESP.restart(); // Full reset ensures a clean state for next connection
+  }
+};
+
+void setup() {
+  Serial.begin(115200);
+  SerialGPS.begin(9600, SERIAL_8N1, GPS_RX, GPS_TX);
+  
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+
+  BLEDevice::init(DEVICE_NAME);
+  BLEServer *pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  pCharacteristic = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID,
+                      BLECharacteristic::PROPERTY_NOTIFY | 
+                      BLECharacteristic::PROPERTY_READ
+                    );
+  pCharacteristic->addDescriptor(new BLE2902());
+  pService->start();
+
+  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+  pAdvertising->addServiceUUID(SERVICE_UUID);
+  BLEDevice::startAdvertising();
+
+  // Initialize state based on current switch position
+  lastReportedState = (digitalRead(BUTTON_PIN) == LOW);
+  Serial.println("🚀 System Ready. Monitoring Hardware...");
+}
+
+void loop() {
+  // 1. GPS Handler (Always active)
+  while (SerialGPS.available() > 0) {
+    if (gps.encode(SerialGPS.read()) && gps.location.isValid() && deviceConnected) {
+      if (millis() - lastGpsSent > 5000) {
+        String gpsData = "GPS:" + String(gps.location.lat(), 6) + "," + String(gps.location.lng(), 6);
+        pCharacteristic->setValue(gpsData.c_str());
+        pCharacteristic->notify();
+        lastGpsSent = millis();
+      }
+    }
+  }
+
+  // 2. SOS Switch Logic (Internal 2-Minute Repeating Loop)
+  bool currentSwitchIsOn = (digitalRead(BUTTON_PIN) == LOW);
+
+  if (currentSwitchIsOn) {
+    // If ON, send "1" immediately the first time, then repeat every 120 seconds
+    if (lastReportedState == false || (millis() - lastSosSentTime > 120000)) { 
+      if (deviceConnected) {
+        pCharacteristic->setValue("1");
+        pCharacteristic->notify();
+        Serial.println("[BTN] SOS ACTIVE -> Sending '1'");
+        lastSosSentTime = millis();
+      }
+      lastReportedState = true;
+    }
+  } else {
+    // If OFF, send "0" once to clear the alert in the app
+    if (lastReportedState == true) {
+      if (deviceConnected) {
+        pCharacteristic->setValue("0");
+        pCharacteristic->notify();
+        Serial.println("[BTN] SOS CLEARED -> Sending '0'");
+      }
+      lastReportedState = false;
+    }
+  }
+
+  // 3. Status LED Logic
+  if (lastReportedState) {
+    // Blinking (1s) when SOS is active
+    if (millis() - lastBlinkTime > 1000) {
+      ledState = !ledState;
+      digitalWrite(LED_PIN, ledState);
+      lastBlinkTime = millis();
+    }
+  } else if (deviceConnected) {
+    // Solid ON when connected and safe
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    // OFF when disconnected
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  delay(10);
+}
